@@ -1,11 +1,14 @@
 name: Update README terminal
 
+# Rebuilds the terminal picture every hour and on every push to main.
+# The two SVGs are published to the `output` branch as a single commit that
+# gets replaced each time, so main only ever changes when you change it.
+
 on:
   schedule:
-    - cron: "37 9 * * *"   # once a day, 09:37 UTC
+    - cron: "7 * * * *"   # every hour, at seven minutes past
   push:
     branches: [main]
-    paths: [build.py, art.txt, .github/workflows/readme.yml]
   workflow_dispatch:
 
 permissions:
@@ -21,16 +24,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Rebuild dark.svg and light.svg
+      - name: Bring back the last known numbers
+        run: |
+          if git fetch --quiet --depth=1 origin output 2>/dev/null; then
+            git show FETCH_HEAD:stats.json > stats.json 2>/dev/null || rm -f stats.json
+          fi
+
+      - name: Build dark.svg and light.svg
         run: python3 build.py
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Commit if anything changed
+      - name: Publish to the output branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dark.svg light.svg stats.json
-          git diff --cached --quiet && exit 0
-          git commit -m "Update terminal"
-          git push
+          git checkout --quiet --orphan output
+          git rm --quiet -r --cached .
+          git add --force dark.svg light.svg stats.json
+          git commit --quiet -m "Terminal as of $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push --quiet --force origin output
